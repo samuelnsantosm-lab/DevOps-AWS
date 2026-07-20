@@ -1,0 +1,101 @@
+name: CI/CD Pipeline - Terraform & ECS
+
+# Dispara a esteira automaticamente a cada push na branch 'main'
+on:
+  push:
+    branches:
+      - main
+
+# Variáveis de ambiente globais (Ajuste para os nomes reais da sua infra)
+env:
+  AWS_REGION: "us-east-1"                   # Substitua pela sua região AWS
+  ECR_REPOSITORY: "nome-do-seu-repo-ecr"    # Nome do repositório ECR
+  ECS_CLUSTER: "nome-do-seu-cluster"        # Nome do Cluster ECS
+  ECS_SERVICE: "nome-do-seu-service"        # Nome do Serviço ECS
+
+jobs:
+  # ==========================================
+  # 1. Linter e Validação do Terraform
+  # ==========================================
+  terraform-checks:
+    name: Terraform Linter & Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Inicializar Terraform (Apenas para validação local)
+        # O backend=false impede que ele tente conectar ao S3/DynamoDB neste passo
+        run: terraform init -backend=false
+        working-directory: ./ # Ajuste se seus arquivos .tf estiverem em uma subpasta
+
+      - name: Checar formatação do código (fmt)
+        run: terraform fmt -check
+        working-directory: ./
+
+      - name: Validar sintaxe (validate)
+        run: terraform validate
+        working-directory: ./
+
+  # ==========================================
+  # 2. Build da Imagem Docker e Push para o ECR
+  # ==========================================
+  build-and-push:
+    name: Build & Push to AWS ECR
+    needs: terraform-checks # Só executa se o Terraform passar
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Credenciais da AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login no Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, e push da imagem para o ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          # Usando 'latest' para simplificar o update do ECS. 
+          # Em produção avançada, recomenda-se usar o SHA do commit: ${{ github.sha }}
+          IMAGE_TAG: latest 
+        run: |
+          echo "Construindo a imagem Docker..."
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          
+          echo "Enviando a imagem para o ECR..."
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+  # ==========================================
+  # 3. Deploy no ECS Fargate
+  # ==========================================
+  deploy:
+    name: Deploy to ECS Fargate
+    needs: build-and-push # Só executa se o build e o push derem certo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configurar Credenciais da AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Atualizar Serviço ECS (Force New Deployment)
+        # O comando abaixo força o ECS a baixar a imagem "latest" atualizada do ECR
+        # e substituir os containers antigos de forma transparente (Rolling Update).
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }}

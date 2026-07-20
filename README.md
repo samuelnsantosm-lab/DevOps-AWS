@@ -805,7 +805,7 @@ Este projeto demonstra **boas práticas de:**
 
 ---
 
-**Última atualização**: Julho 2024  
-**Status**: ✅ Em Produção  
+**Última atualização**: Julho 2025  
+**Status**: Test  
 **Versão**: 1.0.0  
-**Mantido por**: Seu Nome/Equipe
+**Mantido por**: Samuel Santos

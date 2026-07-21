@@ -1,0 +1,162 @@
+---
+# 🔄 Argo CD Application - GitOps Controller
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: fastapi-app
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: fastapi-app
+    app.kubernetes.io/instance: fastapi-app
+spec:
+  # ✅ Projeto Argo CD (controle de RBAC)
+  project: default
+  
+  # ✅ Definição da Fonte (Git Repository)
+  source:
+    # 🔄 SUBSTITUA PELA SUA URL DE REPOSITÓRIO
+    repoURL: https://github.com/seu-usuario/devops-k3s-gitops.git
+    
+    # ✅ Branch/Tag a sincronizar
+    targetRevision: main
+    
+    # ✅ Caminho dos manifests no repositório
+    path: kubernetes/apps/fastapi-app
+    
+    # ✅ Plugins (Kustomize, Helm, etc)
+    # Para usar Kustomize:
+    kustomize:
+      version: v4.5.4
+    
+    # Para usar Helm:
+    # helm:
+    #   releaseName: fastapi-app
+    #   values: |
+    #     replicas: 2
+    #     image:
+    #       tag: latest
+  
+  # ✅ Destino (Cluster Kubernetes)
+  destination:
+    # ✅ Cluster (https://kubernetes.default.svc = cluster local)
+    server: https://kubernetes.default.svc
+    
+    # ✅ Namespace de destino
+    namespace: fastapi
+  
+  # ✅ Sincronização Automática (GitOps automático)
+  syncPolicy:
+    # ✅ Automação
+    automated:
+      # ✅ Deletar recursos não encontrados no Git
+      prune: true
+      
+      # ✅ Auto-sincronizar divergências
+      selfHeal: true
+      
+      # ✅ Permitir repositórios vazios
+      allow:
+        empty: false
+    
+    # ✅ Opções de sincronização
+    syncOptions:
+    # ✅ Criar namespace se não existir
+    - CreateNamespace=true
+    
+    # ✅ PDB (Pod Disruption Budget) durante sync
+    - RespectIgnoreDifferences=true
+    
+    # ✅ Retry policy (tentar novamente em caso de falha)
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  
+  # ✅ Ignorar diferenças (para evitar conflicts)
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+    # Ignorar mudanças automáticas de replicas (se tiver HPA)
+    - /spec/replicas
+  
+  # ✅ Notificações (webhooks)
+  # Será implementado depois com ArgoCD Notifications
+  
+  # ✅ Informações de revisão
+  revisionHistoryLimit: 10
+
+---
+# 📋 AppProject - Controle de RBAC para Applications
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: default
+  namespace: argocd
+spec:
+  # ✅ Descrição
+  description: Default project with fastapi-app access
+  
+  # ✅ Padrões de repositórios permitidos
+  sourceRepos:
+  - 'https://github.com/seu-usuario/devops-k3s-gitops.git'
+  - 'https://github.com/seu-usuario/*'
+  
+  # ✅ Clusters de destino permitidos
+  destinations:
+  - namespace: 'fastapi'
+    server: https://kubernetes.default.svc
+  
+  - namespace: 'monitoring'
+    server: https://kubernetes.default.svc
+  
+  # ✅ Políticas de cluster
+  clusterResourceBlacklist:
+  # ❌ Não permitir deletar namespaces
+  - group: ''
+    kind: Namespace
+  
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRole
+  
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRoleBinding
+  
+  # ✅ Recursos permitidos
+  namespaceResourceBlacklist:
+  # ❌ Não permitir modificar configmaps do sistema
+  - group: ''
+    kind: ResourceQuota
+  
+  - group: ''
+    kind: LimitRange
+  
+  # ✅ Orações (labels que precisam estar presentes)
+  # Esta policy requer que todos os manifests tenham label "app"
+  # orphanedResources:
+  #   warn: false
+  #   ignore:
+  #   - group: apps
+  #     kind: Deployment
+
+---
+# 🔔 Notification - Para alertar sobre sincronizações
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  # ✅ Serviço de notificação (Slack, Discord, etc)
+  service.webhook: |
+    host: my-webhook-server.com
+    port: 80
+  
+  template.app-health-degraded: |
+    message: |
+      Application {{.app.metadata.name}} health is {{.app.status.health.status}}
+      {{if eq .app.status.health.status "Degraded"}}
+        Sync status: {{.app.status.sync.status}}
+      {{end}}

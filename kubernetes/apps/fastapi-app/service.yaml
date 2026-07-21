@@ -1,0 +1,132 @@
+---
+# ✅ Service ClusterIP - Acesso interno
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-app
+  namespace: fastapi
+  labels:
+    app: fastapi-app
+  annotations:
+    prometheus.io/port: "8000"
+    prometheus.io/scrape: "true"
+spec:
+  # ✅ Tipo ClusterIP - apenas acesso interno
+  type: ClusterIP
+  
+  # ✅ Selector - qual deployment esse service aponta
+  selector:
+    app: fastapi-app
+  
+  # ✅ Configuração de sessão
+  sessionAffinity: None  # Alternar entre pods
+  
+  # ✅ Portas
+  ports:
+  - name: http
+    port: 80              # Porta do service
+    targetPort: 8000      # Porta do container
+    protocol: TCP
+  
+  # ✅ Timeout de conexão
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+
+---
+# 🌐 Ingress - HTTP/HTTPS routing
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fastapi-app
+  namespace: fastapi
+  labels:
+    app: fastapi-app
+  annotations:
+    # ✅ Usando Traefik (padrão do K3s)
+    kubernetes.io/ingress.class: "traefik"
+    # ✅ Middleware (middlewares customizadas)
+    traefik.ingress.kubernetes.io/router.middlewares: "fastapi-compress@kubernetescrd"
+    # ✅ CORS
+    traefik.ingress.kubernetes.io/router.middlewares: "fastapi-cors@kubernetescrd"
+spec:
+  # ✅ Regras HTTP
+  rules:
+  - host: fastapi-app.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: fastapi-app
+            port:
+              number: 80
+  
+  - host: api.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: fastapi-app
+            port:
+              number: 80
+
+---
+# NetworkPolicy - Isolamento de rede
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fastapi-app
+  namespace: fastapi
+spec:
+  # ✅ Aplicar para pods com label app=fastapi-app
+  podSelector:
+    matchLabels:
+      app: fastapi-app
+  
+  # ✅ Tipos de política
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # ✅ Ingress - quem pode chamar esse pod
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - namespaceSelector:
+        matchLabels:
+          name: kube-ingress
+    - podSelector:
+        matchLabels:
+          app: fastapi-app
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # ✅ Egress - para onde esse pod pode enviar
+  egress:
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53   # DNS
+    - protocol: UDP
+      port: 53   # DNS
+  - to:
+    - podSelector:
+        matchLabels:
+          app: fastapi-app
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Permitir HTTPS para APIs externas
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443

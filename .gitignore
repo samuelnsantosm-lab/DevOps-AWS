@@ -1,0 +1,94 @@
+# Ambiente & IDE
+.env
+.env.local
+.env.*.local
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Kubernetes
+kubeconfig
+kubeconfig.yaml
+*.kubeconfig
+
+# Argo CD
+.argocd/
+
+# Build & Binaries
+build/
+dist/
+*.o
+*.a
+*.so
+bin/
+
+# Package managers
+node_modules/
+vendor/
+.venv/
+venv/
+__pycache__/
+*.egg-info/
+
+# Secrets (NUNCA commitar!)
+*secret*
+*password*
+*.key
+*.pem
+*credentials*
+terraform.tfvars
+.env.production
+
+# Logs
+*.log
+logs/
+debug/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.*
+crash.log
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# Temporários
+*.tmp
+*.temp
+tmp/
+temp/
+
+# OS Specific
+.DS_Store
+.AppleDouble
+.LSOverride
+.Windows
+Thumbs.db
+
+# Testing
+coverage/
+.coverage
+htmlcov/
+.pytest_cache/
+
+# CI/CD
+.github/workflows/secrets.yml
+
+# Diretórios a ignorar
+node_modules/
+.next/
+.nuxt/
+dist/
+build/
+target/
+
+# Cache
+.cache/
+cache/

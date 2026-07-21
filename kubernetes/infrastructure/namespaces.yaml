@@ -1,0 +1,20 @@
+---
+# Namespace para a aplicação FastAPI
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fastapi
+  labels:
+    name: fastapi
+    environment: development
+    owner: devops-team
+
+---
+# Namespace para Argo CD (se quiser gerenciar separadamente)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels:
+    name: argocd
+    environment: infrastructure

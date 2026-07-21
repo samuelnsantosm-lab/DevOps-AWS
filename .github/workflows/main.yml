@@ -2,9 +2,7 @@ name: CI/CD Pipeline - Terraform & ECS
 
 # Dispara a esteira automaticamente a cada push na branch 'main'
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 # Variáveis de ambiente globais (Ajuste para os nomes reais da sua infra)
 env:

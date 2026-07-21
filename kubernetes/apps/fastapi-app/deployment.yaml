@@ -1,0 +1,186 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-app
+  namespace: fastapi
+  labels:
+    app: fastapi-app
+    version: v1
+    component: backend
+spec:
+  # ✅ Sempre ter pelo menos 2 réplicas para HA
+  replicas: 2
+  
+  # ✅ Rolling update strategy - zero downtime
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1          # Permitir 1 pod extra durante atualização
+      maxUnavailable: 0    # Zero pods indisponíveis
+  
+  # ✅ Seletor de pods
+  selector:
+    matchLabels:
+      app: fastapi-app
+  
+  # ✅ Template do pod
+  template:
+    metadata:
+      labels:
+        app: fastapi-app
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    
+    spec:
+      # ✅ Política de reinicialização do pod
+      restartPolicy: Always
+      
+      # ✅ Service account (permissões)
+      serviceAccountName: fastapi-app
+      
+      # ✅ Image pull policy para atualizar imagem
+      imagePullPolicy: Always
+      
+      # ✅ Containers da aplicação
+      containers:
+      - name: fastapi
+        # 🔄 SUBSTITUA PELO SEU USUÁRIO DOCKER HUB
+        image: seu-usuario-dockerhub/fastapi-app:latest
+        imagePullPolicy: Always
+        
+        # ✅ Portas que o container expõe
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        
+        # ✅ Requisição de recursos (mínimo que o pod precisa)
+        resources:
+          requests:
+            memory: "128Mi"      # Mínimo de memória
+            cpu: "100m"          # Mínimo de CPU (0.1 core)
+          limits:
+            memory: "512Mi"      # Máximo de memória
+            cpu: "500m"          # Máximo de CPU (0.5 core)
+        
+        # ✅ Liveness Probe - Verifica se container está vivo
+        # Se falhar 3x, pod é reiniciado
+        livenessProbe:
+          httpGet:
+            path: /                # Endpoint de health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 10  # Aguarda 10s antes de começar
+          periodSeconds: 10        # Verifica a cada 10s
+          timeoutSeconds: 5        # Timeout de 5s
+          failureThreshold: 3      # Reinicia após 3 falhas
+        
+        # ✅ Readiness Probe - Verifica se container está pronto para receber tráfego
+        # Se falhar, pod sai do load balancer mas não é reiniciado
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 5   # Aguarda 5s
+          periodSeconds: 5         # Verifica a cada 5s
+          timeoutSeconds: 3        # Timeout de 3s
+          failureThreshold: 3      # Remove do LB após 3 falhas
+        
+        # ✅ Startup Probe (Kubernetes 1.18+) - Tempo de inicialização
+        startupProbe:
+          httpGet:
+            path: /
+            port: 8000
+          failureThreshold: 30     # Aguarda até 30*10 = 300s para iniciar
+          periodSeconds: 10
+        
+        # ✅ Variáveis de ambiente
+        env:
+        - name: ENVIRONMENT
+          value: "development"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: PORT
+          value: "8000"
+        - name: HOSTNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        
+        # ✅ Volumes (se tiver arquivos persistentes)
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+      
+      # ✅ Volumes definidos no pod
+      volumes:
+      - name: config
+        configMap:
+          name: fastapi-config
+          defaultMode: 0644
+      
+      # ✅ Pod Disruption Budget (PDB)
+      # Garante mínimo de pods disponíveis
+      podDisruptionBudget:
+        minAvailable: 1
+      
+      # ✅ Affinity - Distribuir pods entre nós
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - fastapi-app
+              topologyKey: kubernetes.io/hostname  # Diferentes nós
+
+---
+# Service Account para o deployment
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fastapi-app
+  namespace: fastapi
+  labels:
+    app: fastapi-app
+
+---
+# Role para permissões do pod
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fastapi-app
+  namespace: fastapi
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+
+---
+# Role Binding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fastapi-app
+  namespace: fastapi
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: fastapi-app
+subjects:
+- kind: ServiceAccount
+  name: fastapi-app
+  namespace: fastapi

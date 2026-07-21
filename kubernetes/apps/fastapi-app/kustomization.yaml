@@ -1,0 +1,88 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Namespace onde os recursos serão criados
+namespace: fastapi
+
+# CommonLabels - adiciona labels a todos os recursos
+commonLabels:
+  app: fastapi-app
+  managed-by: kustomize
+  environment: development
+
+# CommonAnnotations - adiciona annotations a todos os recursos
+commonAnnotations:
+  description: "FastAPI microservice deployment"
+  version: "1.0.0"
+
+# Recursos base a incluir
+resources:
+- deployment.yaml
+- service.yaml
+- configmap.yaml
+
+# Patches - modificar recursos antes de aplicar
+# Exemplo: mudar image tag, replicas, etc
+patchesStrategicMerge:
+- |-
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: fastapi-app
+  spec:
+    replicas: 2
+    template:
+      spec:
+        containers:
+        - name: fastapi
+          image: seu-usuario-dockerhub/fastapi-app:latest
+
+# Replicas override
+replicas:
+- name: fastapi-app
+  count: 2
+
+# Images - permite fácil mudança de imagem
+images:
+- name: seu-usuario-dockerhub/fastapi-app
+  newName: seu-usuario-dockerhub/fastapi-app
+  newTag: latest
+
+# Vars - substituições de variáveis
+vars:
+- name: APP_NAME
+  objref:
+    kind: Deployment
+    name: fastapi-app
+    apiVersion: apps/v1
+  fieldref:
+    fieldpath: metadata.name
+
+# ConfigMapGenerator - gerar ConfigMap a partir de arquivos
+# configMapGenerator:
+# - name: app-config
+#   files:
+#   - config.yaml
+#   - app.env
+
+# SecretGenerator - gerar Secret (ainda em Git, usar criptografia!)
+# secretGenerator:
+# - name: app-secrets
+#   envs:
+#   - secrets.env
+
+# SortOrder para aplicação
+sortOptions:
+  order: fifo
+
+# Metadata da imagem
+metadata:
+  labels:
+  - includeSelectors: true
+    pairs:
+      version: v1.0
+
+# Validação de recursos
+validationOptions:
+  ignoredKinds:
+  - Event  # Ignorar Events que são auto-gerados
